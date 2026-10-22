@@ -20,7 +20,7 @@ const FeedPage = () => {
 
   if (isLoading) return <div>로딩 중...</div>;
 
-  if (isError)
+  if (meData.isError)
     return (
       <div>
         로그인이 필요합니다. <Link to="/login">로그인 </Link>
@@ -48,7 +48,8 @@ const FeedPage = () => {
         }}
       >
         {posts?.map((post, key) => (
-          <div
+          <Link
+            to={`/posts/${post.id}`}
             className="feed-item"
             style={{
               width: "100%",
@@ -57,6 +58,7 @@ const FeedPage = () => {
               cursor: "pointer",
               display: "flex",
             }}
+            key={key}
           >
             <div className="feed-item-index" style={{ width: "20px" }}>
               {key + 1}.
@@ -70,7 +72,7 @@ const FeedPage = () => {
             >
               {post.authorNameSnapshot}
             </div>
-          </div>
+          </Link>
         ))}
       </div>
     </>
