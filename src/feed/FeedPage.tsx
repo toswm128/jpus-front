@@ -9,11 +9,7 @@ const FeedPage = () => {
     queryFn: getMe,
   });
 
-  const {
-    isLoading,
-    isError,
-    data: posts,
-  } = useQuery({
+  const { isLoading, data: posts } = useQuery({
     queryKey: ["posts"],
     queryFn: getPosts,
   });
@@ -38,6 +34,7 @@ const FeedPage = () => {
           textAlign: "right",
         }}
       >
+        <Link to="/persona">프로필 설정 </Link>
         환영합니다. {meData.data?.nickname}님
       </div>
       <div

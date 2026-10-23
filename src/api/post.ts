@@ -20,7 +20,6 @@ export interface comment {
 export interface createCommentRequest {
   id: number;
   content: string;
-  personaId: number;
 }
 
 export async function getPosts(): Promise<Post[]> {
@@ -49,9 +48,11 @@ export async function getPost(id: number): Promise<Post> {
 
 export async function createComment({
   id,
-  personaId,
   content,
 }: createCommentRequest): Promise<void> {
+  const personaId = localStorage.getItem("personaId");
+
+  if (!personaId) throw new Error("프로필 선택 필요");
   const response = await fetch("/api/posts/" + id + "/comments", {
     method: "POST",
     headers: {

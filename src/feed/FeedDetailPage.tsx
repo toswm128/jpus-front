@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { getPost, getPosts } from "../api/post";
-import { useNavigate, useParams } from "react-router";
+import { getPost } from "../api/post";
+import { useParams } from "react-router";
 import CommentComponent from "./CommentComponent";
 
 const FeedDetailPage = () => {

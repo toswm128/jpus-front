@@ -1,9 +1,4 @@
-import {
-  QueryClient,
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createComment, getComments } from "../api/post";
 import { useState, type SubmitEvent } from "react";
 
@@ -19,15 +14,11 @@ const CommentComponent = ({ postId }: CommentComponentI) => {
     createCommentMutation.mutate({
       id: postId,
       content: text,
-      personaId: 1,
     });
+    setText("");
   };
 
-  const {
-    isError,
-    isLoading,
-    data: comments,
-  } = useQuery({
+  const { isLoading, data: comments } = useQuery({
     queryKey: ["posts", postId, "comments"],
     queryFn: () => getComments(postId),
   });
@@ -56,7 +47,7 @@ const CommentComponent = ({ postId }: CommentComponentI) => {
           margin: "32px auto",
         }}
       >
-        {comments?.map((comment) => (
+        {comments?.map((comment, key) => (
           <div
             style={{
               border: "1px solid black",
@@ -64,6 +55,7 @@ const CommentComponent = ({ postId }: CommentComponentI) => {
               display: "flex",
               gap: "4px",
             }}
+            key={key}
           >
             <div className="">{comment.authorNameSnapshot}:</div>
             <div className="">{comment.content}</div>
