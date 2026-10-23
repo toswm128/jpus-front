@@ -1,22 +1,21 @@
 import { useQuery } from "@tanstack/react-query";
-import { getPosts } from "../api/post";
+import { getPost, getPosts } from "../api/post";
 import { useNavigate, useParams } from "react-router";
+import CommentComponent from "./CommentComponent";
 
 const FeedDetailPage = () => {
-  const {
-    isLoading,
-    isError,
-    data: posts,
-  } = useQuery({
-    queryKey: ["posts"],
-    queryFn: getPosts,
-  });
-
   const { id } = useParams();
 
   const postId = Number(id);
 
-  const post = posts?.find((post) => post.id == postId);
+  const {
+    isLoading,
+    isError,
+    data: post,
+  } = useQuery({
+    queryKey: ["posts", id],
+    queryFn: () => getPost(postId),
+  });
 
   if (isLoading) return <div>로딩 중...</div>;
 
@@ -30,11 +29,7 @@ const FeedDetailPage = () => {
       <h1>{post?.content}</h1>
       <div>{post?.authorNameSnapshot}</div>
 
-      <form>
-        <h5>댓글</h5>
-        <textarea />
-        <button type="submit">작성</button>
-      </form>
+      <CommentComponent postId={postId} />
     </div>
   );
 };
