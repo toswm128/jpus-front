@@ -19,6 +19,10 @@ const RequireAuth = () => {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
+  if (error) {
+    return <div>문제가 발생했습니다.</div>;
+  }
+
   return <Outlet />;
 };
 
