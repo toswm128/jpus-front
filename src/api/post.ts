@@ -21,6 +21,9 @@ export interface createCommentRequest {
   id: number;
   content: string;
 }
+export interface createPostRequest {
+  content: string;
+}
 
 export async function getPosts(): Promise<Post[]> {
   const response = await fetch("/api/posts", {
@@ -41,6 +44,31 @@ export async function getPost(id: number): Promise<Post> {
 
   if (!response.ok) {
     throw new Error("게시글 조회 실패");
+  }
+
+  return response.json();
+}
+
+export async function createPost({
+  content,
+}: createPostRequest): Promise<void> {
+  const personaId = localStorage.getItem("personaId");
+  if (!personaId) throw new Error("프로필 선택 필요");
+
+  const response = await fetch("/api/posts", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    credentials: "include",
+    body: JSON.stringify({
+      personaId,
+      content,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error("게시글 작성 실패");
   }
 
   return response.json();

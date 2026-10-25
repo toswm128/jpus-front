@@ -72,6 +72,10 @@ const FeedPage = () => {
           </Link>
         ))}
       </div>
+
+      <div>
+        <Link to="posts">글 쓰기</Link>
+      </div>
     </>
   );
 };
