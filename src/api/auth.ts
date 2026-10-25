@@ -13,6 +13,8 @@ export interface UserResponse {
   nickname: string;
 }
 
+export class UnauthenticatedError extends Error {}
+
 export async function login(request: LoginRequest): Promise<void> {
   const response = await fetch("/api/auth/login", {
     method: "POST",
@@ -47,6 +49,10 @@ export async function getMe(): Promise<UserResponse> {
   const response = await fetch("/api/auth/me", {
     credentials: "include",
   });
+
+  if (response.status === 401) {
+    throw new UnauthenticatedError("로그인 필요");
+  }
 
   if (!response.ok) {
     throw new Error("사용자 조회 실패");
