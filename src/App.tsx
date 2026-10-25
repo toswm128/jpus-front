@@ -5,6 +5,7 @@ import SignupPage from "./auth/SignupPage";
 import FeedPage from "./feed/FeedPage";
 import FeedDetailPage from "./feed/FeedDetailPage";
 import PersonaPage from "./persona/PersonaPage";
+import PersonaCreatePage from "./persona/PersonaCreatePage";
 import FeedPostPage from "./feed/FeedPostPage";
 
 const App = () => {
@@ -15,6 +16,7 @@ const App = () => {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/signup" element={<SignupPage />} />
       <Route path="/persona" element={<PersonaPage />} />
+      <Route path="/persona/create" element={<PersonaCreatePage />} />
       <Route path="/posts" element={<FeedPostPage />} />
     </Routes>
   );

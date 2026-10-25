@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { getPersonas } from "../api/persona";
-import { useNavigate } from "react-router";
+import { Link, useNavigate } from "react-router";
 
 const PersonaPage = () => {
   const { isLoading, data } = useQuery({
@@ -23,6 +23,7 @@ const PersonaPage = () => {
     <>
       <div className="">
         <h1>당신의 프로필을 정하세요</h1>
+        <Link to="/persona/create">페르소나 만들기</Link>
         <div className="persona-list">
           {data?.map((persona, key) => (
             <div
