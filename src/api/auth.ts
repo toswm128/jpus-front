@@ -3,6 +3,10 @@ export interface LoginRequest {
   password: string;
 }
 
+export interface SignupRequest extends LoginRequest {
+  nickname: string;
+}
+
 export interface UserResponse {
   id: number;
   username: string;
@@ -21,6 +25,21 @@ export async function login(request: LoginRequest): Promise<void> {
 
   if (!response.ok) {
     throw new Error("로그인 실패");
+  }
+}
+
+export async function signup(request: SignupRequest): Promise<void> {
+  const response = await fetch("/api/users", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    credentials: "include",
+    body: JSON.stringify(request),
+  });
+
+  if (!response.ok) {
+    throw new Error("회원가입 실패");
   }
 }
 
