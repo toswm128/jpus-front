@@ -13,6 +13,8 @@ const RequirePersona = () => {
     retry: false,
   });
 
+  const seletedPersonaId = localStorage.getItem("personaId");
+
   const location = useLocation();
 
   if (isPending) {
@@ -21,9 +23,15 @@ const RequirePersona = () => {
   if (error) {
     return <div>문제가 발생했습니다.</div>;
   }
-
   if (personas?.length === 0) {
     return <Navigate to="/persona/create" state={{ from: location }} replace />;
+  }
+
+  if (
+    !seletedPersonaId ||
+    !personas?.some((p) => p.id === Number(seletedPersonaId))
+  ) {
+    return <Navigate to="/persona" state={{ from: location }} replace />;
   }
 
   return <Outlet />;

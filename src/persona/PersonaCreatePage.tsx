@@ -24,7 +24,7 @@ const PersonaCreatePage = () => {
 
   return (
     <main>
-      <h1>페르소나 만들기</h1>
+      <h1>프로필 만들기</h1>
       <form onSubmit={handleSubmit}>
         <label>
           이름
