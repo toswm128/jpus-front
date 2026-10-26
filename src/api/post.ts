@@ -111,3 +111,20 @@ export async function getComments(id: number): Promise<comment[]> {
 
   return response.json();
 }
+
+export async function deleteComment({
+  postId,
+  commentId,
+}: {
+  postId: number;
+  commentId: number;
+}): Promise<void> {
+  const response = await fetch(`/api/posts/${postId}/comments/${commentId}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    throw new Error("댓글 삭제 실패");
+  }
+}

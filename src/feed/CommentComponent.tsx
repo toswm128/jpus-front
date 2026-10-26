@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createComment, getComments } from "../api/post";
+import { createComment, deleteComment, getComments } from "../api/post";
 import { useState, type SubmitEvent } from "react";
 
 interface CommentComponentI {
@@ -8,6 +8,17 @@ interface CommentComponentI {
 
 const CommentComponent = ({ postId }: CommentComponentI) => {
   const [text, setText] = useState("");
+  const deleteCommentMutation = useMutation({
+    mutationFn: deleteComment,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ["posts", postId, "comments"],
+      });
+    },
+    onError: () => {
+      alert("댓글 삭제에 실패했습니다.");
+    },
+  });
 
   const handleSubmit = (e: SubmitEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -15,7 +26,10 @@ const CommentComponent = ({ postId }: CommentComponentI) => {
       id: postId,
       content: text,
     });
-    setText("");
+  };
+
+  const handleDelete = (commentId: number) => {
+    deleteCommentMutation.mutate({ postId, commentId });
   };
 
   const { isLoading, data: comments } = useQuery({
@@ -32,6 +46,11 @@ const CommentComponent = ({ postId }: CommentComponentI) => {
       queryClient.invalidateQueries({
         queryKey: ["posts", postId, "comments"],
       });
+      setText("");
+    },
+
+    onError: () => {
+      alert("댓글 작성에 실패했습니다.");
     },
   });
 
@@ -59,13 +78,24 @@ const CommentComponent = ({ postId }: CommentComponentI) => {
           >
             <div className="">{comment.authorNameSnapshot}:</div>
             <div className="">{comment.content}</div>
+            {comment.personaId ===
+              Number(localStorage.getItem("personaId")) && (
+              <button
+                onClick={() => handleDelete(comment.id)}
+                disabled={deleteCommentMutation.isPending}
+              >
+                {deleteCommentMutation.isPending ? "삭제 중..." : "삭제"}
+              </button>
+            )}
           </div>
         ))}
       </div>
       <form onSubmit={handleSubmit}>
         <h5>댓글</h5>
         <textarea value={text} onChange={(e) => setText(e.target.value)} />
-        <button type="submit">작성</button>
+        <button type="submit" disabled={createCommentMutation.isPending}>
+          {createCommentMutation.isPending ? "게시 중..." : "게시"}
+        </button>
       </form>
     </>
   );

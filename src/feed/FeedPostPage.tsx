@@ -1,4 +1,4 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, type SubmitEvent } from "react";
 import { createPost } from "../api/post";
 import { useNavigate } from "react-router";
@@ -7,10 +7,16 @@ const FeedPostPage = () => {
   const [text, setText] = useState("");
   const nav = useNavigate();
 
+  const queryClient = useQueryClient();
+
   const createPostMutation = useMutation({
     mutationFn: createPost,
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["posts"] });
       nav("/");
+    },
+    onError: () => {
+      alert("게시글 작성에 실패했습니다.");
     },
   });
 
@@ -29,7 +35,9 @@ const FeedPostPage = () => {
             value={text}
             onChange={(e) => setText(e.target.value)}
           ></textarea>
-          <button type="submit"> 게시</button>
+          <button type="submit" disabled={createPostMutation.isPending}>
+            {createPostMutation.isPending ? "게시 중..." : "게시"}
+          </button>
         </form>
       </div>
     </>
