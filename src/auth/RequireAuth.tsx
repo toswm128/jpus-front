@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Navigate, Outlet, useLocation } from "react-router";
 import { getMe, UnauthenticatedError } from "../api/auth";
+import { LoadingState, Notice } from "../components/ui";
 
 const RequireAuth = () => {
   const { isPending, error } = useQuery({
@@ -12,7 +13,7 @@ const RequireAuth = () => {
   const location = useLocation();
 
   if (isPending) {
-    return <div>로딩 중...</div>;
+    return <div className="route-state"><LoadingState label="로그인 정보를 확인하고 있어요" /></div>;
   }
 
   if (error instanceof UnauthenticatedError) {
@@ -20,7 +21,7 @@ const RequireAuth = () => {
   }
 
   if (error) {
-    return <div>문제가 발생했습니다.</div>;
+    return <div className="route-state"><Notice>로그인 정보를 불러오지 못했어요. 잠시 후 새로고침해 주세요.</Notice></div>;
   }
 
   return <Outlet />;
