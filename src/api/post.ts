@@ -15,6 +15,7 @@ export interface comment {
   authorNameSnapshot: string;
   createdAt: string;
   updatedAt: string | null;
+  isMine: boolean;
 }
 
 export interface createCommentRequest {

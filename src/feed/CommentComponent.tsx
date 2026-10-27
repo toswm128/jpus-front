@@ -78,8 +78,7 @@ const CommentComponent = ({ postId }: CommentComponentI) => {
           >
             <div className="">{comment.authorNameSnapshot}:</div>
             <div className="">{comment.content}</div>
-            {comment.personaId ===
-              Number(localStorage.getItem("personaId")) && (
+            {comment.isMine && (
               <button
                 onClick={() => handleDelete(comment.id)}
                 disabled={deleteCommentMutation.isPending}
