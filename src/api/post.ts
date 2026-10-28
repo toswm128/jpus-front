@@ -7,6 +7,11 @@ export interface Post {
   updatedAt: string | null;
 }
 
+export interface ReactionResponse {
+  reactionCount: number;
+  reactedByMe: boolean;
+}
+
 export interface comment {
   id: number;
   postId: number;
@@ -127,5 +132,39 @@ export async function deleteComment({
 
   if (!response.ok) {
     throw new Error("댓글 삭제 실패");
+  }
+}
+
+export async function getPostReaction(postId: number): Promise<ReactionResponse> {
+  const response = await fetch(`/api/posts/${postId}/reaction`, {
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    throw new Error("좋아요 조회 실패");
+  }
+
+  return response.json();
+}
+
+export async function likePost(postId: number): Promise<void> {
+  const response = await fetch(`/api/posts/${postId}/reaction`, {
+    method: "POST",
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    throw new Error("좋아요 실패");
+  }
+}
+
+export async function unlikePost(postId: number): Promise<void> {
+  const response = await fetch(`/api/posts/${postId}/reaction`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    throw new Error("좋아요 취소 실패");
   }
 }

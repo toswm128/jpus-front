@@ -9,6 +9,7 @@ export type IconName =
   | "chevron-down"
   | "check"
   | "message"
+  | "heart"
   | "pen"
   | "trash"
   | "sparkles"
@@ -32,6 +33,8 @@ const paths: Record<IconName, string> = {
   "chevron-down": "m6 9 6 6 6-6",
   check: "m5 12 4 4L19 6",
   message: "M21 11.5a8.5 8.5 0 0 1-8.5 8.5H4l-2 2V11.5a9.5 9.5 0 0 1 19 0Z",
+  heart:
+    "M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78Z",
   pen: "m16 3 5 5M4 20l4-1L21 6a2.12 2.12 0 0 0-3-3L5 16Z",
   trash: "M3 6h18M9 6V4h6v2M5 6l1 14h12l1-14M10 10v6M14 10v6",
   sparkles:
