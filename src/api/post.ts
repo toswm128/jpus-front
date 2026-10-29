@@ -1,25 +1,32 @@
-export interface PostSummaryResponse {
-  content: Post[];
-  page: page;
-}
-
-export interface page {
-  number: number;
-  size: number;
-
-  totalElements: number;
-
-  totalPages: number;
-}
-
 export interface Post {
   id: number;
+  title: string | null;
   content: string;
   personaId: number;
   authorNameSnapshot: string;
   createdAt: string;
   updatedAt: string | null;
 }
+
+export interface PostSummaryResponse extends Post {
+  commentCount: number;
+  reactionCount: number;
+  reactedByMe: boolean;
+}
+
+export interface PageMetadata {
+  number: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
+}
+
+export interface PagedResponse<T> {
+  content: T[];
+  page: PageMetadata;
+}
+
+export type PostPageResponse = PagedResponse<PostSummaryResponse>;
 
 export interface ReactionResponse {
   reactionCount: number;
@@ -41,12 +48,20 @@ export interface createCommentRequest {
   id: number;
   content: string;
 }
-export interface createPostRequest {
+export interface CreatePostRequest {
+  title: string;
   content: string;
 }
 
-export async function getPosts(): Promise<PostSummaryResponse> {
-  const response = await fetch("/api/posts", {
+export async function getPosts(
+  page = 0,
+  size = 20,
+): Promise<PostPageResponse> {
+  const params = new URLSearchParams({
+    page: String(page),
+    size: String(size),
+  });
+  const response = await fetch(`/api/posts?${params}`, {
     credentials: "include",
   });
 
@@ -57,7 +72,7 @@ export async function getPosts(): Promise<PostSummaryResponse> {
   return response.json();
 }
 
-export async function getPost(id: number): Promise<Post> {
+export async function getPost(id: number): Promise<PostSummaryResponse> {
   const response = await fetch("/api/posts/" + id, {
     credentials: "include",
   });
@@ -70,10 +85,13 @@ export async function getPost(id: number): Promise<Post> {
 }
 
 export async function createPost({
+  title,
   content,
-}: createPostRequest): Promise<void> {
-  const personaId = localStorage.getItem("personaId");
-  if (!personaId) throw new Error("프로필 선택 필요");
+}: CreatePostRequest): Promise<Post> {
+  const personaId = Number(localStorage.getItem("personaId"));
+  if (!Number.isSafeInteger(personaId) || personaId <= 0) {
+    throw new Error("프로필 선택 필요");
+  }
 
   const response = await fetch("/api/posts", {
     method: "POST",
@@ -83,6 +101,7 @@ export async function createPost({
     credentials: "include",
     body: JSON.stringify({
       personaId,
+      title,
       content,
     }),
   });

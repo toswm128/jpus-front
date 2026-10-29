@@ -79,3 +79,10 @@ export default function ExamplePage() {
 
 서버 요청은 `src/api/`에 두고 기존 세션 쿠키와 쿼리 키를 유지하세요.
 선택한 Persona ID는 UX를 위한 값이며, 실제 소유권 검증은 서버가 담당합니다.
+
+게시글 목록은 `getPosts(page, size)`의 `{ content, page }` 응답을 사용하고,
+상세 조회에도 제목·댓글 수·좋아요 수·내 좋아요 여부가 포함됩니다.
+조회용 `PostSummaryResponse`와 생성 결과인 기본 `Post` 타입은 구분합니다.
+피드의 페이지 번호는 URL의 `page`에 저장합니다.
+캐시 키는 `src/api/postKeys.ts`를 사용해 사용자·페이지·게시글을 구분하세요.
+댓글 변경 시 댓글 목록과 게시글 집계를 함께 갱신하고, 좋아요 변경 시 게시글 응답을 갱신합니다.

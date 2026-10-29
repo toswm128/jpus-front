@@ -1,7 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
+import { getMe } from "../api/auth";
 import { getPersonas } from "../api/persona";
 import { getPosts } from "../api/post";
+import { postKeys } from "../api/postKeys";
 import Icon from "../components/Icon";
 import {
   Avatar,
@@ -14,10 +16,28 @@ import {
 } from "../components/ui";
 import { formatDate } from "../lib/format";
 
+const PAGE_SIZE = 20;
+const MAX_PAGE = Math.floor(2_147_483_647 / PAGE_SIZE);
+
+function parsePage(value: string | null): number {
+  if (value === null || !/^\d+$/.test(value)) return 0;
+  const page = Number(value);
+  return Number.isSafeInteger(page) && page >= 0 && page <= MAX_PAGE
+    ? page
+    : 0;
+}
+
 const FeedPage = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const page = parsePage(searchParams.get("page"));
+  const { data: me } = useQuery({
+    queryKey: ["me"],
+    queryFn: getMe,
+  });
   const postsQuery = useQuery({
-    queryKey: ["posts"],
-    queryFn: getPosts,
+    queryKey: postKeys.list(me?.id, page, PAGE_SIZE),
+    queryFn: () => getPosts(page, PAGE_SIZE),
+    enabled: me !== undefined,
   });
   const { data: personas } = useQuery({
     queryKey: ["personas"],
@@ -27,6 +47,25 @@ const FeedPage = () => {
   const selectedPersona = personas?.find(
     (persona) => persona.id === selectedPersonaId,
   );
+  const currentPage = postsQuery.data?.page.number ?? page;
+  const totalPages = postsQuery.data?.page.totalPages ?? 0;
+  const firstPageNumber = Math.max(0, Math.min(currentPage - 1, totalPages - 3));
+  const nearbyPages = Array.from(
+    { length: Math.min(3, totalPages) },
+    (_, index) => firstPageNumber + index,
+  );
+  const detailSearchParams = new URLSearchParams(searchParams);
+  detailSearchParams.set("page", String(page));
+  const detailSearch = "?" + detailSearchParams.toString();
+
+  const changePage = (nextPage: number) => {
+    if (postsQuery.isFetching || nextPage < 0) return;
+    setSearchParams((previous) => {
+      const next = new URLSearchParams(previous);
+      next.set("page", String(nextPage));
+      return next;
+    });
+  };
 
   return (
     <div className="page-stack">
@@ -57,7 +96,7 @@ const FeedPage = () => {
             <h2>최신 이야기</h2>
             {postsQuery.data && (
               <span className="feed-count">
-                {postsQuery.data.content.length}개의 이야기
+                {postsQuery.data.page.totalElements.toLocaleString("ko-KR")}개의 이야기
               </span>
             )}
           </div>
@@ -72,13 +111,14 @@ const FeedPage = () => {
               <div className="inline-actions">
                 <Button
                   variant="secondary"
+                  disabled={postsQuery.isFetching}
                   onClick={() => postsQuery.refetch()}
                 >
-                  다시 불러오기
+                  {postsQuery.isFetching ? "불러오는 중..." : "다시 불러오기"}
                 </Button>
               </div>
             </Card>
-          ) : postsQuery.data.content.length === 0 ? (
+          ) : postsQuery.data.page.totalElements === 0 ? (
             <EmptyState
               icon={<Icon name="message" size={26} />}
               title="첫 번째 이야기를 들려주세요"
@@ -90,12 +130,27 @@ const FeedPage = () => {
                 </Link>
               }
             />
+          ) : postsQuery.data.content.length === 0 ? (
+            <EmptyState
+              icon={<Icon name="message" size={26} />}
+              title="이 페이지에는 이야기가 없어요"
+              description="글이 삭제되었거나 마지막 페이지를 지난 주소일 수 있어요. 첫 페이지에서 이야기를 다시 만나보세요."
+              action={
+                <Button
+                  variant="secondary"
+                  disabled={postsQuery.isFetching}
+                  onClick={() => changePage(0)}
+                >
+                  첫 페이지로 돌아가기
+                </Button>
+              }
+            />
           ) : (
             <div className="feed-list">
               {postsQuery.data.content.map((post) => (
                 <Link
                   className="post-card"
-                  to={`/posts/${post.id}`}
+                  to={{ pathname: `/posts/${post.id}`, search: detailSearch }}
                   key={post.id}
                 >
                   <div className="post-card__header">
@@ -119,14 +174,74 @@ const FeedPage = () => {
                       size={18}
                     />
                   </div>
+                  <h2 className="post-card__title">
+                    {post.title?.trim() || "제목 없는 이야기"}
+                  </h2>
                   <p className="post-card__content">{post.content}</p>
                   <div className="post-card__footer">
-                    <span>이야기 읽기</span>
+                    <span className="post-card__stats">
+                      <span className="post-stat" role="img" aria-label={`댓글 ${post.commentCount}개`}>
+                        <Icon name="message" size={15} />
+                        <span>{post.commentCount.toLocaleString("ko-KR")}</span>
+                      </span>
+                      <span
+                        className={"post-stat" + (post.reactedByMe ? " post-stat--liked" : "")}
+                        role="img"
+                        aria-label={`${post.reactedByMe ? "내가 좋아요한 이야기, " : ""}좋아요 ${post.reactionCount}개`}
+                      >
+                        <Icon name="heart" size={15} fill={post.reactedByMe ? "currentColor" : "none"} />
+                        <span>{post.reactionCount.toLocaleString("ko-KR")}</span>
+                      </span>
+                    </span>
                     <Icon name="arrow-right" size={16} />
                   </div>
                 </Link>
               ))}
             </div>
+          )}
+
+          {postsQuery.isSuccess && postsQuery.data.content.length > 0 && totalPages > 1 && (
+            <nav className="feed-pagination" aria-label="피드 페이지">
+              <div className="pagination-controls">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={postsQuery.isFetching || currentPage === 0}
+                  onClick={() => changePage(currentPage - 1)}
+                >
+                  <Icon name="arrow-left" size={15} />
+                  이전
+                </Button>
+                <div className="pagination-pages">
+                  {nearbyPages.map((pageNumber) => (
+                    <Button
+                      key={pageNumber}
+                      className={"pagination-page" + (pageNumber === currentPage ? " pagination-page--current" : "")}
+                      variant={pageNumber === currentPage ? "primary" : "ghost"}
+                      size="sm"
+                      disabled={postsQuery.isFetching || pageNumber === currentPage}
+                      aria-label={`${pageNumber + 1}페이지로 이동`}
+                      aria-current={pageNumber === currentPage ? "page" : undefined}
+                      onClick={() => changePage(pageNumber)}
+                    >
+                      {pageNumber + 1}
+                    </Button>
+                  ))}
+                </div>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={postsQuery.isFetching || currentPage >= totalPages - 1}
+                  onClick={() => changePage(currentPage + 1)}
+                >
+                  다음
+                  <Icon name="arrow-right" size={15} />
+                </Button>
+              </div>
+              <p className="pagination-summary" aria-live="polite">
+                {currentPage + 1} / {totalPages.toLocaleString("ko-KR")} 페이지
+              </p>
+            </nav>
           )}
         </section>
 

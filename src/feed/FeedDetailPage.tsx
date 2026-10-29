@@ -1,9 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
-import { Link, useParams } from "react-router";
+import { Link, useParams, useSearchParams } from "react-router";
+import { getMe } from "../api/auth";
 import { getPost } from "../api/post";
+import { postKeys } from "../api/postKeys";
 import Icon from "../components/Icon";
 import {
   Avatar,
+  Button,
   Card,
   EmptyState,
   LoadingState,
@@ -15,18 +18,26 @@ import PostReaction from "./PostReaction";
 
 const FeedDetailPage = () => {
   const { id } = useParams();
+  const [searchParams] = useSearchParams();
   const postId = Number(id);
   const isValidPostId = Number.isSafeInteger(postId) && postId > 0;
-
-  const postQuery = useQuery({
-    queryKey: ["posts", id],
-    queryFn: () => getPost(postId),
-    enabled: isValidPostId,
+  const { data: me } = useQuery({
+    queryKey: ["me"],
+    queryFn: getMe,
   });
+  const postQuery = useQuery({
+    queryKey: postKeys.detail(me?.id, postId),
+    queryFn: () => getPost(postId),
+    enabled: isValidPostId && me !== undefined,
+  });
+  const post = postQuery.data;
+  const search = searchParams.toString();
+  const feedUrl = search ? "/?" + search : "/";
+  const contentKey = String(me?.id) + ":" + postId;
 
   return (
     <div className="page-stack">
-      <Link className="back-link" to="/">
+      <Link className="back-link" to={feedUrl}>
         <Icon name="arrow-left" size={17} />
         모든 이야기
       </Link>
@@ -37,55 +48,86 @@ const FeedDetailPage = () => {
           title="이야기를 찾을 수 없어요"
           description="게시글 주소를 다시 확인하거나, 다른 이야기를 만나보세요."
           action={
-            <Link className="button button--secondary" to="/">
+            <Link className="button button--secondary" to={feedUrl}>
               피드로 돌아가기
             </Link>
           }
         />
       ) : postQuery.isPending ? (
         <LoadingState label="이야기를 불러오고 있어요." />
-      ) : postQuery.isError ? (
+      ) : !post ? (
         <Card className="error-card">
           <Notice>
             이야기를 불러오지 못했어요. 삭제된 글이거나 잠시 연결이 원활하지
             않을 수 있어요.
           </Notice>
+          <Button
+            variant="secondary"
+            disabled={postQuery.isFetching}
+            onClick={() => void postQuery.refetch()}
+          >
+            다시 불러오기
+          </Button>
         </Card>
       ) : (
         <>
+          {postQuery.isError && (
+            <Card className="error-card">
+              <Notice>
+                최신 정보를 불러오지 못했어요. 현재 표시된 이야기는 이전에
+                불러온 내용이에요.
+              </Notice>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={postQuery.isFetching}
+                onClick={() => void postQuery.refetch()}
+              >
+                {postQuery.isFetching ? "불러오는 중..." : "다시 불러오기"}
+              </Button>
+            </Card>
+          )}
+
           <Card className="post-detail">
             <article aria-labelledby="post-detail-title">
               <div className="post-detail__header">
                 <div className="author">
-                  <Avatar name={postQuery.data.authorNameSnapshot} size="lg" />
+                  <Avatar name={post.authorNameSnapshot} size="lg" />
                   <div className="author__meta">
-                    <h1 id="post-detail-title" className="author__name">
-                      {postQuery.data.authorNameSnapshot}의 이야기
-                    </h1>
-                    <time
-                      className="author__time"
-                      dateTime={postQuery.data.createdAt}
-                    >
-                      {formatDate(postQuery.data.createdAt)}
+                    <span className="author__name">{post.authorNameSnapshot}</span>
+                    <time className="author__time" dateTime={post.createdAt}>
+                      {formatDate(post.createdAt)}
                     </time>
                   </div>
                 </div>
-                <span className="muted">#{postQuery.data.id}</span>
+                <span className="muted">#{post.id}</span>
               </div>
-              <div className="post-detail__body">{postQuery.data.content}</div>
-              <div className="post-detail__footer">
-                <PostReaction key={postId} postId={postId} />
-              </div>
-              <div className="post-detail__footer">
-                <Icon name="message" size={16} />
-                <span>아래에서 이야기를 이어가 보세요.</span>
-                {postQuery.data.updatedAt && (
-                  <span className="muted">수정된 이야기</span>
+
+              <h1 id="post-detail-title" className="post-detail__title">
+                {post.title?.trim() || "제목 없는 이야기"}
+              </h1>
+              <div className="post-detail__body">{post.content}</div>
+
+              <div className="post-detail__footer post-detail__actions">
+                <PostReaction
+                  key={contentKey}
+                  post={post}
+                  disabled={postQuery.isFetching || postQuery.isError}
+                />
+                <a className="post-comments-link" href="#post-comments">
+                  <Icon name="message" size={17} />
+                  댓글 {post.commentCount.toLocaleString("ko-KR")}
+                </a>
+                {post.updatedAt && (
+                  <span className="post-detail__edited">수정된 이야기</span>
                 )}
               </div>
             </article>
           </Card>
-          <CommentComponent postId={postId} />
+
+          <section id="post-comments" aria-label="게시글 댓글">
+            <CommentComponent key={contentKey} postId={postId} />
+          </section>
         </>
       )}
     </div>

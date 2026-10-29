@@ -1,5 +1,5 @@
 import { useState, type SubmitEvent } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router";
 import { login } from "../api/auth";
 import AuthLayout from "../components/AuthLayout";
@@ -10,11 +10,15 @@ const LoginPage = () => {
   const [password, setPassword] = useState("");
 
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   const loginMutation = useMutation({
     mutationFn: login,
 
-    onSuccess: async () => {
+    onSuccess: () => {
+      for (const key of ["me", "personas", "posts", "comments", "reactions"]) {
+        queryClient.removeQueries({ queryKey: [key] });
+      }
       navigate("/");
     },
   });

@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type SubmitEvent } from "react";
 import { createComment, deleteComment, getComments } from "../api/post";
+import { getMe } from "../api/auth";
+import { commentKeys, postKeys } from "../api/postKeys";
 import Icon from "../components/Icon";
 import { Avatar, Button, Card, LoadingState, Notice } from "../components/ui";
 import { formatDate } from "../lib/format";
@@ -12,27 +14,30 @@ interface CommentComponentI {
 const CommentComponent = ({ postId }: CommentComponentI) => {
   const [text, setText] = useState("");
   const queryClient = useQueryClient();
+  const { data: me } = useQuery({ queryKey: ["me"], queryFn: getMe });
+  const commentsKey = commentKeys.list(me?.id, postId);
   const commentsQuery = useQuery({
-    queryKey: ["posts", postId, "comments"],
+    queryKey: commentsKey,
     queryFn: () => getComments(postId),
+    enabled: me !== undefined,
   });
+
+  const refreshCommentsAndCounts = () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: commentsKey, exact: true }),
+      queryClient.invalidateQueries({ queryKey: postKeys.all }),
+    ]);
 
   const deleteCommentMutation = useMutation({
     mutationFn: deleteComment,
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: ["posts", postId, "comments"],
-      });
-    },
+    onSuccess: refreshCommentsAndCounts,
   });
 
   const createCommentMutation = useMutation({
     mutationFn: createComment,
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ["posts", postId, "comments"],
-      });
+    onSuccess: async () => {
       setText("");
+      await refreshCommentsAndCounts();
     },
   });
 
