@@ -1,3 +1,17 @@
+export interface PostSummaryResponse {
+  content: Post[];
+  page: page;
+}
+
+export interface page {
+  number: number;
+  size: number;
+
+  totalElements: number;
+
+  totalPages: number;
+}
+
 export interface Post {
   id: number;
   content: string;
@@ -31,7 +45,7 @@ export interface createPostRequest {
   content: string;
 }
 
-export async function getPosts(): Promise<Post[]> {
+export async function getPosts(): Promise<PostSummaryResponse> {
   const response = await fetch("/api/posts", {
     credentials: "include",
   });
@@ -135,7 +149,9 @@ export async function deleteComment({
   }
 }
 
-export async function getPostReaction(postId: number): Promise<ReactionResponse> {
+export async function getPostReaction(
+  postId: number,
+): Promise<ReactionResponse> {
   const response = await fetch(`/api/posts/${postId}/reaction`, {
     credentials: "include",
   });

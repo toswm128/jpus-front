@@ -36,8 +36,7 @@ const FeedPage = () => {
         description="다양한 페르소나와 만나고, 당신의 생각을 나눠보세요."
         actions={
           <Link className="button button--primary" to="/posts">
-            <Icon name="plus" size={18} />
-            새 이야기
+            <Icon name="plus" size={18} />새 이야기
           </Link>
         }
       />
@@ -49,10 +48,7 @@ const FeedPage = () => {
             <span className="composer-prompt__input">
               지금 어떤 생각을 하고 있나요?
             </span>
-            <span
-              className="composer-prompt__arrow"
-              aria-hidden="true"
-            >
+            <span className="composer-prompt__arrow" aria-hidden="true">
               <Icon name="pen" size={19} />
             </span>
           </Link>
@@ -60,7 +56,9 @@ const FeedPage = () => {
           <div className="feed-toolbar">
             <h2>최신 이야기</h2>
             {postsQuery.data && (
-              <span className="feed-count">{postsQuery.data.length}개의 이야기</span>
+              <span className="feed-count">
+                {postsQuery.data.content.length}개의 이야기
+              </span>
             )}
           </div>
 
@@ -68,14 +66,19 @@ const FeedPage = () => {
             <LoadingState label="이야기를 불러오고 있어요." />
           ) : postsQuery.isError ? (
             <Card className="error-card">
-              <Notice>이야기를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.</Notice>
+              <Notice>
+                이야기를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.
+              </Notice>
               <div className="inline-actions">
-                <Button variant="secondary" onClick={() => postsQuery.refetch()}>
+                <Button
+                  variant="secondary"
+                  onClick={() => postsQuery.refetch()}
+                >
                   다시 불러오기
                 </Button>
               </div>
             </Card>
-          ) : postsQuery.data.length === 0 ? (
+          ) : postsQuery.data.content.length === 0 ? (
             <EmptyState
               icon={<Icon name="message" size={26} />}
               title="첫 번째 이야기를 들려주세요"
@@ -89,19 +92,32 @@ const FeedPage = () => {
             />
           ) : (
             <div className="feed-list">
-              {postsQuery.data.map((post) => (
-                <Link className="post-card" to={`/posts/${post.id}`} key={post.id}>
+              {postsQuery.data.content.map((post) => (
+                <Link
+                  className="post-card"
+                  to={`/posts/${post.id}`}
+                  key={post.id}
+                >
                   <div className="post-card__header">
                     <div className="author">
                       <Avatar name={post.authorNameSnapshot} />
                       <div className="author__meta">
-                        <span className="author__name">{post.authorNameSnapshot}</span>
-                        <time className="author__time" dateTime={post.createdAt}>
+                        <span className="author__name">
+                          {post.authorNameSnapshot}
+                        </span>
+                        <time
+                          className="author__time"
+                          dateTime={post.createdAt}
+                        >
                           {formatDate(post.createdAt)}
                         </time>
                       </div>
                     </div>
-                    <Icon className="post-card__arrow" name="arrow-up-right" size={18} />
+                    <Icon
+                      className="post-card__arrow"
+                      name="arrow-up-right"
+                      size={18}
+                    />
                   </div>
                   <p className="post-card__content">{post.content}</p>
                   <div className="post-card__footer">
@@ -122,16 +138,22 @@ const FeedPage = () => {
                 <div className="active-persona">
                   <Avatar name={selectedPersona.displayName} size="lg" />
                   <div className="active-persona__info">
-                    <h2 className="rail-card__title">{selectedPersona.displayName}</h2>
+                    <h2 className="rail-card__title">
+                      {selectedPersona.displayName}
+                    </h2>
                     <span className="muted">나의 공개 프로필</span>
                   </div>
                 </div>
                 {selectedPersona.bio && (
-                  <p className="rail-card__description">{selectedPersona.bio}</p>
+                  <p className="rail-card__description">
+                    {selectedPersona.bio}
+                  </p>
                 )}
               </>
             ) : (
-              <p className="rail-card__description">이야기를 나눌 페르소나를 선택해 보세요.</p>
+              <p className="rail-card__description">
+                이야기를 나눌 페르소나를 선택해 보세요.
+              </p>
             )}
             <Link className="button button--secondary" to="/persona">
               <Icon name="users" size={17} />
@@ -143,8 +165,8 @@ const FeedPage = () => {
             <Icon name="sparkles" size={24} />
             <h2 className="rail-card__title">여러 모습의 나를 만나는 곳</h2>
             <p className="rail-card__description">
-              취향도, 관심사도, 이야기하는 모습도 다양하니까요.
-              페르소나마다 새로운 이야기를 시작해 보세요.
+              취향도, 관심사도, 이야기하는 모습도 다양하니까요. 페르소나마다
+              새로운 이야기를 시작해 보세요.
             </p>
             <Link className="back-link" to="/persona/create">
               새로운 페르소나 만들기
