@@ -177,7 +177,7 @@ const FeedPage = () => {
                   <h2 className="post-card__title">
                     {post.title?.trim() || "제목 없는 이야기"}
                   </h2>
-                  <p className="post-card__content">{post.content}</p>
+                  <p className="post-card__content">{post.content.trim() || "사진이 담긴 이야기"}</p>
                   <div className="post-card__footer">
                     <span className="post-card__stats">
                       <span className="post-stat" role="img" aria-label={`댓글 ${post.commentCount}개`}>

@@ -1,3 +1,5 @@
+import { prepareRichPost, type RichDocument, type RichPostDraft } from "../feed/richContent";
+
 export interface Post {
   id: number;
   title: string | null;
@@ -12,6 +14,17 @@ export interface PostSummaryResponse extends Post {
   commentCount: number;
   reactionCount: number;
   reactedByMe: boolean;
+}
+
+export interface PostImageResponse {
+  id: number;
+  url: string;
+  sortOrder: number;
+}
+
+export interface PostDetailResponse extends PostSummaryResponse {
+  contentJson?: RichDocument | null;
+  images?: PostImageResponse[];
 }
 
 export interface PageMetadata {
@@ -53,6 +66,11 @@ export interface CreatePostRequest {
   content: string;
 }
 
+export interface CreateRichPostRequest {
+  title: string;
+  draft: RichPostDraft;
+}
+
 export async function getPosts(
   page = 0,
   size = 20,
@@ -72,13 +90,54 @@ export async function getPosts(
   return response.json();
 }
 
-export async function getPost(id: number): Promise<PostSummaryResponse> {
+export async function getPost(id: number): Promise<PostDetailResponse> {
   const response = await fetch("/api/posts/" + id, {
     credentials: "include",
   });
 
   if (!response.ok) {
     throw new Error("게시글 조회 실패");
+  }
+
+  return response.json();
+}
+
+export async function createRichPost({
+  title,
+  draft,
+}: CreateRichPostRequest): Promise<Post> {
+  const personaId = Number(localStorage.getItem("personaId"));
+  if (!Number.isSafeInteger(personaId) || personaId <= 0) {
+    throw new Error("프로필을 선택해 주세요.");
+  }
+  const trimmedTitle = title.trim();
+  if (!trimmedTitle || trimmedTitle.length > 100) {
+    throw new Error("제목은 1~100자로 입력해 주세요.");
+  }
+
+  const prepared = prepareRichPost(draft);
+  const body = new FormData();
+  body.append("post", new Blob([JSON.stringify({
+    personaId,
+    title: trimmedTitle,
+    contentJson: prepared.contentJson,
+    imageClientIds: prepared.imageClientIds,
+  })], { type: "application/json" }));
+  for (const image of prepared.images) {
+    body.append("images", image, image.name);
+  }
+
+  const response = await fetch("/api/posts", {
+    method: "POST",
+    credentials: "include",
+    body,
+  });
+
+  if (!response.ok) {
+    const message = response.status === 413
+      ? "첨부한 사진의 용량이 너무 커요. 장당 5MB 이하로 선택해 주세요."
+      : "이야기를 게시하지 못했어요. 잠시 후 다시 시도해 주세요.";
+    throw new Error(message);
   }
 
   return response.json();

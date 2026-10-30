@@ -1,15 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState, type SubmitEvent } from "react";
+import { lazy, Suspense, useState, type SubmitEvent } from "react";
 import { Link, useNavigate } from "react-router";
 import { getPersonas } from "../api/persona";
-import { createPost } from "../api/post";
+import { createRichPost } from "../api/post";
 import { postKeys } from "../api/postKeys";
 import Icon from "../components/Icon";
-import { Avatar, Button, Card, Notice, PageHeader } from "../components/ui";
+import { Avatar, Button, Card, LoadingState, Notice, PageHeader } from "../components/ui";
+import type { RichPostDraft } from "./richContent";
+
+const RichPostEditor = lazy(() => import("./RichPostEditor"));
 
 const FeedPostPage = () => {
   const [title, setTitle] = useState("");
-  const [text, setText] = useState("");
+  const [draft, setDraft] = useState<RichPostDraft | null>(null);
   const nav = useNavigate();
   const queryClient = useQueryClient();
   const { data: personas } = useQuery({
@@ -21,17 +24,24 @@ const FeedPostPage = () => {
   );
 
   const createPostMutation = useMutation({
-    mutationFn: createPost,
+    mutationFn: createRichPost,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: postKeys.all });
       nav("/");
     },
   });
 
+  const textLength = draft?.text.length ?? 0;
+  const canPublish = title.trim().length > 0
+    && draft !== null
+    && (draft.text.trim().length > 0 || draft.images.length > 0)
+    && textLength <= 20_000
+    && !createPostMutation.isPending;
+
   const handleSubmit = (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!title.trim() || !text.trim() || createPostMutation.isPending) return;
-    createPostMutation.mutate({ title: title.trim(), content: text });
+    if (!canPublish || !draft) return;
+    createPostMutation.mutate({ title: title.trim(), draft });
   };
 
   return (
@@ -81,30 +91,31 @@ const FeedPostPage = () => {
             </div>
           </div>
 
-          <label className="sr-only" htmlFor="post-content">이야기 내용</label>
-          <textarea
-            id="post-content"
-            name="content"
-            className="textarea editor-textarea"
-            placeholder="지금 나누고 싶은 이야기는 무엇인가요?"
-            value={text}
-            onChange={(event) => setText(event.target.value)}
-            disabled={createPostMutation.isPending}
-            required
-            rows={10}
-          />
+          <Suspense fallback={<LoadingState label="글쓰기 도구를 준비하고 있어요." />}>
+            <RichPostEditor
+              onChange={setDraft}
+              disabled={createPostMutation.isPending}
+            />
+          </Suspense>
+
+          {textLength > 20_000 && (
+            <Notice>본문은 20,000자 이내로 작성해 주세요.</Notice>
+          )}
 
           {createPostMutation.isError && (
-            <Notice>이야기를 게시하지 못했어요. 작성한 제목과 내용은 유지되니 다시 시도해 주세요.</Notice>
+            <Notice>{createPostMutation.error.message} 작성한 제목과 내용은 유지돼요.</Notice>
           )}
 
           <div className="editor-footer">
-            <span className="editor-count">{text.length.toLocaleString("ko-KR")}자</span>
+            <span className="editor-count">
+              {textLength.toLocaleString("ko-KR")} / 20,000자
+              {(draft?.images.length ?? 0) > 0 && ` · 사진 ${draft?.images.length}장`}
+            </span>
             <div className="form-actions">
               <Link className="button button--ghost" to="/">취소</Link>
               <Button
                 type="submit"
-                disabled={!title.trim() || !text.trim() || createPostMutation.isPending}
+                disabled={!canPublish}
               >
                 <Icon name="arrow-up-right" size={18} />
                 {createPostMutation.isPending ? "게시 중..." : "이야기 게시하기"}

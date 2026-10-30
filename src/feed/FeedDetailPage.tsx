@@ -15,6 +15,7 @@ import {
 import { formatDate } from "../lib/format";
 import CommentComponent from "./CommentComponent";
 import PostReaction from "./PostReaction";
+import PostContent from "./PostContent";
 
 const FeedDetailPage = () => {
   const { id } = useParams();
@@ -106,7 +107,12 @@ const FeedDetailPage = () => {
               <h1 id="post-detail-title" className="post-detail__title">
                 {post.title?.trim() || "제목 없는 이야기"}
               </h1>
-              <div className="post-detail__body">{post.content}</div>
+              <PostContent
+                postId={post.id}
+                content={post.content}
+                contentJson={post.contentJson}
+                images={post.images}
+              />
 
               <div className="post-detail__footer post-detail__actions">
                 <PostReaction

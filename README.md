@@ -17,6 +17,7 @@ Vite가 `/api` 접두사를 제거해 백엔드로 프록시합니다. 인증은
 
 ```sh
 pnpm build
+pnpm test:content
 ```
 
 ## 화면을 추가할 때
@@ -86,3 +87,25 @@ export default function ExamplePage() {
 피드의 페이지 번호는 URL의 `page`에 저장합니다.
 캐시 키는 `src/api/postKeys.ts`를 사용해 사용자·페이지·게시글을 구분하세요.
 댓글 변경 시 댓글 목록과 게시글 집계를 함께 갱신하고, 좋아요 변경 시 게시글 응답을 갱신합니다.
+
+### 본문 에디터와 이미지
+
+`RichPostEditor.tsx`는 Tiptap으로 글·서식·이미지를 편집합니다. 작성 화면에서만 에디터 코드를 불러옵니다.
+사진은 JPEG·PNG, 장당 5MB, 최대 5장까지 선택할 수 있고, 커서 위치에 삽입됩니다.
+작성 중에는 브라우저의 임시 URL로 미리 보며, 실행 취소를 위해 파일을 유지하다가 화면을 떠날 때 URL을 해제합니다.
+
+`createRichPost()`는 `POST /api/posts`에 multipart 요청을 보냅니다.
+
+- `post`: `personaId`, `title`, `contentJson`, `imageClientIds`를 담은 JSON 부분
+- `images`: `imageClientIds`와 같은 순서의 파일 부분들
+
+`richContent.ts`에서 본문과 파일 참조를 검증하고 임시 미리보기 주소를 제거합니다.
+서버는 일반 텍스트 `content`를 본문에서 추출하고, 저장된 이미지 ID로 본문의 임시 참조를 바꿔야 합니다.
+이 작성 화면을 사용하려면 서버에 multipart 작성 API가 구현되어 있어야 합니다.
+
+상세 응답은 기존 필드에 `contentJson`과 `images: [{ id, url, sortOrder }]`를 추가합니다.
+`PostContent.tsx`는 문서 순서대로 본문을 표시하고, 해당 게시글의 이미지 목록에 있는 이미지 ID만 사용합니다.
+이미지 URL은 서버의 `/posts/{postId}/images/{imageId}` 경로에 `/api`를 붙여 같은 출처로 요청합니다.
+`contentJson`이 없는 기존 글은 일반 텍스트로 표시합니다.
+
+`pnpm test:content`는 본문·파일 매핑, 요청 형식, 이미지 제한, 기존 글 호환성과 안전한 본문 표시를 검증합니다.
