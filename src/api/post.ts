@@ -57,6 +57,24 @@ export interface comment {
   isMine: boolean;
 }
 
+// Match the current comment column's capacity until its server policy changes.
+export const MAX_COMMENT_LENGTH = 255;
+
+export interface UpdateCommentRequest {
+  postId: number;
+  commentId: number;
+  content: string;
+}
+
+function validateCommentContent(content: string): void {
+  if (typeof content !== "string" || !content.trim()) {
+    throw new Error("댓글 내용을 입력해 주세요.");
+  }
+  if (content.length > MAX_COMMENT_LENGTH) {
+    throw new Error(`댓글은 ${MAX_COMMENT_LENGTH}자 이내로 입력해 주세요.`);
+  }
+}
+
 export interface createCommentRequest {
   id: number;
   content: string;
@@ -175,7 +193,8 @@ export async function createPost({
 export async function createComment({
   id,
   content,
-}: createCommentRequest): Promise<void> {
+}: createCommentRequest): Promise<comment> {
+  validateCommentContent(content);
   const personaId = localStorage.getItem("personaId");
 
   if (!personaId) throw new Error("프로필 선택 필요");
@@ -193,6 +212,37 @@ export async function createComment({
 
   if (!response.ok) {
     throw new Error("댓글달기 실패");
+  }
+
+  return response.json();
+}
+
+export async function updateComment({
+  postId,
+  commentId,
+  content,
+}: UpdateCommentRequest): Promise<comment> {
+  if (!Number.isSafeInteger(postId) || postId <= 0
+      || !Number.isSafeInteger(commentId) || commentId <= 0) {
+    throw new Error("수정할 댓글을 확인해 주세요.");
+  }
+  validateCommentContent(content);
+
+  const response = await fetch(`/api/posts/${postId}/comments/${commentId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ content }),
+  });
+
+  if (!response.ok) {
+    if (response.status === 404) {
+      throw new Error("댓글이 삭제되었거나 수정할 수 없어요.");
+    }
+    if (response.status === 401) {
+      throw new Error("로그인이 만료됐어요. 다시 로그인해 주세요.");
+    }
+    throw new Error("댓글을 수정하지 못했어요. 잠시 후 다시 시도해 주세요.");
   }
 
   return response.json();

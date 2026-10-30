@@ -1,12 +1,16 @@
 {
   "name": "jpus-front",
   "private": true,
+  "engines": {
+    "node": ">=24 <25"
+  },
   "version": "0.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "test:content": "node --test tests/rich-content.test.mjs",
+    "test:comments": "node --test tests/comment-api.test.mjs",
     "lint": "eslint .",
     "preview": "vite preview"
   },

@@ -12,12 +12,16 @@ pnpm install
 pnpm dev
 ```
 
+`nvm use`는 현재 터미널의 Node 버전을 바꿉니다. 새 터미널에서도 실행 전에 적용하고,
+`node -v`가 `v24.x`인지 확인하세요. 프로젝트의 Node 버전 조건은 `package.json`에도 지정되어 있습니다.
+
 프론트는 기본적으로 http://localhost:5173, 백엔드는 http://localhost:8080입니다.
 Vite가 `/api` 접두사를 제거해 백엔드로 프록시합니다. 인증은 세션 쿠키를 사용합니다.
 
 ```sh
 pnpm build
 pnpm test:content
+pnpm test:comments
 ```
 
 ## 화면을 추가할 때
@@ -86,7 +90,14 @@ export default function ExamplePage() {
 조회용 `PostSummaryResponse`와 생성 결과인 기본 `Post` 타입은 구분합니다.
 피드의 페이지 번호는 URL의 `page`에 저장합니다.
 캐시 키는 `src/api/postKeys.ts`를 사용해 사용자·페이지·게시글을 구분하세요.
-댓글 변경 시 댓글 목록과 게시글 집계를 함께 갱신하고, 좋아요 변경 시 게시글 응답을 갱신합니다.
+댓글 작성·삭제 시 댓글 목록과 게시글 집계를 함께 갱신하고, 좋아요 변경 시 게시글 응답을 갱신합니다.
+
+내 댓글에서는 수정 버튼으로 본문을 편집하고 저장하거나 취소할 수 있습니다.
+수정은 `PATCH /api/posts/{postId}/comments/{commentId}`에 `{ content }`만 보내며, 소유권은 서버가 인증 계정으로 확인합니다.
+수정 중 저장에 실패하면 입력을 유지하고, 성공하면 현재 계정·게시글의 댓글 캐시만 갱신합니다.
+작성·삭제 시에는 댓글 수가 달라지므로 게시글 집계도 갱신합니다.
+현재 댓글 컬럼 길이에 맞춰 작성·수정은 공백을 제외한 내용이 있는 255자 이하의 본문을 받습니다.
+`pnpm test:comments`는 수정 요청·응답과 세션 인증, 입력 제한, 실패 응답 처리를 검증합니다.
 
 ### 본문 에디터와 이미지
 
