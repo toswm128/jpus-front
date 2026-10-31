@@ -1,6 +1,9 @@
 import type { Editor } from "@tiptap/core";
 import Image from "@tiptap/extension-image";
 import Placeholder from "@tiptap/extension-placeholder";
+import { closeHistory } from "@tiptap/pm/history";
+import { Fragment } from "@tiptap/pm/model";
+import { NodeSelection } from "@tiptap/pm/state";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
@@ -17,6 +20,7 @@ import "./RichPostEditor.css";
 type RichPostEditorProps = {
   onChange: (draft: RichPostDraft) => void;
   disabled?: boolean;
+  initialContent?: RichDocument;
 };
 
 type EditorToolProps = {
@@ -27,13 +31,14 @@ type EditorToolProps = {
   disabled?: boolean;
 };
 
-// Only this editor's selected files can create image nodes. Pasted HTML and
-// Markdown image URLs never become image nodes that bypass local attachments.
+// Saved images arrive through initial JSON; new images use selected files.
+// Pasted HTML and Markdown image URLs cannot bypass those attachment paths.
 const LocalImage = Image.extend({
   addAttributes() {
     return {
       ...this.parent?.(),
       clientId: { default: null, rendered: false },
+      imageId: { default: null, rendered: false },
     };
   },
   parseHTML() {
@@ -80,16 +85,53 @@ function EditorGlyph({ path }: { path: string }) {
 }
 
 function countImages(editor: Editor): number {
-  let count = 0;
-  editor.state.doc.descendants((node) => {
-    if (node.type.name === "image") count += 1;
+  const references = new Set<string>();
+  editor.state.doc.descendants((node, position) => {
+    if (node.type.name !== "image") return;
+    const imageId: unknown = node.attrs.imageId;
+    const clientId: unknown = node.attrs.clientId;
+    if (typeof imageId === "number" && Number.isSafeInteger(imageId) && imageId > 0) {
+      references.add(`image:${imageId}`);
+    } else if (typeof clientId === "string" && clientId.length > 0) {
+      references.add(`client:${clientId}`);
+    } else {
+      references.add(`node:${position}`);
+    }
   });
-  return count;
+  return references.size;
+}
+
+function getImageMove(editor: Editor, direction: "up" | "down") {
+  const { selection } = editor.state;
+  if (!(selection instanceof NodeSelection) || selection.node.type.name !== "image") return null;
+
+  const parent = selection.$from.parent;
+  const index = selection.$from.index();
+  const neighborIndex = index + (direction === "up" ? -1 : 1);
+  const neighbor = parent.maybeChild(neighborIndex);
+  if (!neighbor) return null;
+
+  const firstIndex = Math.min(index, neighborIndex);
+  const replacement = Fragment.fromArray(direction === "up"
+    ? [selection.node, neighbor]
+    : [neighbor, selection.node]);
+  // For example, a list item must keep its opening paragraph before an image.
+  if (!parent.canReplace(firstIndex, firstIndex + 2, replacement)) return null;
+
+  return {
+    from: direction === "up" ? selection.from - neighbor.nodeSize : selection.from,
+    to: direction === "up" ? selection.to : selection.to + neighbor.nodeSize,
+    selectedPosition: direction === "up"
+      ? selection.from - neighbor.nodeSize
+      : selection.from + neighbor.nodeSize,
+    replacement,
+  };
 }
 
 export default function RichPostEditor({
   onChange,
   disabled = false,
+  initialContent,
 }: RichPostEditorProps) {
   const labelId = useId();
   const hintId = useId();
@@ -99,6 +141,11 @@ export default function RichPostEditor({
   const disabledRef = useRef(disabled);
   const attachmentsRef = useRef(new Map<string, PostImageAttachment>());
   const previewUrlsRef = useRef(new Map<string, string>());
+  // A refetch may supply a newer document while someone is editing. A new
+  // document is loaded only when the parent mounts a new editor instance.
+  const [initialDocument] = useState<RichDocument>(() => initialContent ?? {
+    type: "doc", content: [{ type: "paragraph" }],
+  });
   const [imageError, setImageError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -181,7 +228,7 @@ export default function RichPostEditor({
 
   const editor = useEditor({
     extensions,
-    content: { type: "doc", content: [{ type: "paragraph" }] },
+    content: initialDocument,
     immediatelyRender: false,
     shouldRerenderOnTransaction: true,
     editable: !disabled,
@@ -264,6 +311,29 @@ export default function RichPostEditor({
 
   const imageCount = editor ? countImages(editor) : 0;
   const toolbarDisabled = disabled || !editor;
+  const imageSelected = editor?.state.selection instanceof NodeSelection
+    && editor.state.selection.node.type.name === "image";
+  const canMoveImageUp = editor ? getImageMove(editor, "up") !== null : false;
+  const canMoveImageDown = editor ? getImageMove(editor, "down") !== null : false;
+
+  const moveSelectedImage = (direction: "up" | "down") => {
+    if (!editor || !editor.isEditable || disabledRef.current) return;
+    const move = getImageMove(editor, direction);
+    if (!move) return;
+    const transaction = closeHistory(editor.state.tr)
+      .replaceWith(move.from, move.to, move.replacement);
+    transaction.setSelection(NodeSelection.create(transaction.doc, move.selectedPosition));
+    editor.view.dispatch(transaction.scrollIntoView());
+    editor.view.focus();
+  };
+
+  const deleteSelectedImage = () => {
+    if (!editor || !editor.isEditable || disabledRef.current) return;
+    const { selection } = editor.state;
+    if (!(selection instanceof NodeSelection) || selection.node.type.name !== "image") return;
+    editor.view.dispatch(closeHistory(editor.state.tr).deleteSelection().scrollIntoView());
+    editor.view.focus();
+  };
 
   return (
     <div className={"rich-post-field" + (disabled ? " rich-post-field--disabled" : "")}>
@@ -313,6 +383,20 @@ export default function RichPostEditor({
               <EditorGlyph path="M21 7v6h-6M21 13a8 8 0 1 0-2 7" />
             </EditorTool>
           </div>
+          {imageSelected && (
+            <div className="rich-post-toolbar__group rich-post-toolbar__image-actions" role="group" aria-label="선택한 이미지 조작">
+              <span className="rich-post-toolbar__image-label">이미지</span>
+              <EditorTool label="이미지 위로 이동" disabled={toolbarDisabled || !canMoveImageUp} onClick={() => moveSelectedImage("up")}>
+                <EditorGlyph path="M12 20V4m-6 6 6-6 6 6" />
+              </EditorTool>
+              <EditorTool label="이미지 아래로 이동" disabled={toolbarDisabled || !canMoveImageDown} onClick={() => moveSelectedImage("down")}>
+                <EditorGlyph path="M12 4v16m-6-6 6 6 6-6" />
+              </EditorTool>
+              <EditorTool label="선택한 이미지 삭제" disabled={toolbarDisabled} onClick={deleteSelectedImage}>
+                <EditorGlyph path="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v5m4-5v5" />
+              </EditorTool>
+            </div>
+          )}
         </div>
 
         <EditorContent editor={editor} className="rich-post-editor__body" />
@@ -333,7 +417,7 @@ export default function RichPostEditor({
         }}
       />
       <p id={hintId} className="rich-post-field__hint">
-        JPEG·PNG, 한 장당 5MB 이내 · 최대 {MAX_POST_IMAGES}장. 이미지는 선택 후 Backspace로 삭제할 수 있어요.
+        JPEG·PNG, 한 장당 5MB 이내 · 기존 이미지를 포함해 최대 {MAX_POST_IMAGES}장. 이미지를 선택하면 위·아래 이동과 삭제 버튼이 나타나요.
       </p>
       {imageError && <Notice>{imageError}</Notice>}
     </div>

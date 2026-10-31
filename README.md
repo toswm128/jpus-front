@@ -101,7 +101,7 @@ export default function ExamplePage() {
 
 ### 본문 에디터와 이미지
 
-`RichPostEditor.tsx`는 Tiptap으로 글·서식·이미지를 편집합니다. 작성 화면에서만 에디터 코드를 불러옵니다.
+`RichPostEditor.tsx`는 Tiptap으로 글·서식·이미지를 편집합니다. 작성 또는 수정 화면을 열 때 에디터 코드를 불러옵니다.
 사진은 JPEG·PNG, 장당 5MB, 최대 5장까지 선택할 수 있고, 커서 위치에 삽입됩니다.
 작성 중에는 브라우저의 임시 URL로 미리 보며, 실행 취소를 위해 파일을 유지하다가 화면을 떠날 때 URL을 해제합니다.
 
@@ -119,4 +119,15 @@ export default function ExamplePage() {
 이미지 URL은 서버의 `/posts/{postId}/images/{imageId}` 경로에 `/api`를 붙여 같은 출처로 요청합니다.
 `contentJson`이 없는 기존 글은 일반 텍스트로 표시합니다.
 
-`pnpm test:content`는 본문·파일 매핑, 요청 형식, 이미지 제한, 기존 글 호환성과 안전한 본문 표시를 검증합니다.
+상세 응답의 `isMine`이 `true`인 글에서는 수정 버튼을 표시합니다. 수정 에디터는 현재 제목·본문·사진을 불러오고,
+이미지를 선택하면 이동·삭제 도구를 표시합니다. 기존 일반 텍스트 글도 수정할 수 있습니다.
+`updateRichPost()`는 `PATCH /api/posts/{postId}`에 multipart 요청을 보냅니다.
+
+- `post`: `title`, `contentJson`, `imageClientIds`를 담은 JSON 부분. 수정에는 `personaId`를 보내지 않습니다.
+- 본문의 기존 사진: `imageId`를 유지합니다. 본문에서 제거한 기존 사진은 서버에서 삭제합니다.
+- `images`: 새로 추가한 파일만 보냅니다. 기존 사진만 유지·재배치할 때는 파일 부분이 없습니다.
+
+수정 응답은 기본 게시글 DTO이므로, 저장 성공 후 상세 데이터를 다시 조회해 새 이미지 ID와 순서를 반영합니다.
+저장 후 상세 조회만 실패한 경우에는 조회만 재시도하며 수정 요청을 중복 전송하지 않습니다.
+
+`pnpm test:content`는 작성·수정의 본문·파일 매핑, 요청 형식, 이미지 제한, 기존 글 호환성과 안전한 본문 표시를 검증합니다.

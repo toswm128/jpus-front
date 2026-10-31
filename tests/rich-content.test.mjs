@@ -16,7 +16,7 @@ const entry = path.join(temporary, "entry.ts");
 await writeFile(entry, [
   `export * from ${JSON.stringify(path.join(root, "src/feed/richContent.ts"))};`,
   `export { default as PostContent } from ${JSON.stringify(path.join(root, "src/feed/PostContent.tsx"))};`,
-  `export { createRichPost } from ${JSON.stringify(path.join(root, "src/api/post.ts"))};`,
+  `export { createRichPost, updateRichPost } from ${JSON.stringify(path.join(root, "src/api/post.ts"))};`,
 ].join("\n"));
 await build({
   root,
@@ -27,7 +27,7 @@ await build({
     rollupOptions: { output: { entryFileNames: "entry.mjs" } },
   },
 });
-const { prepareRichPost, PostContent, createRichPost } = await import(
+const { prepareRichPost, prepareRichPostUpdate, createPostEditDraft, PostContent, createRichPost, updateRichPost } = await import(
   pathToFileURL(path.join(temporary, "build/entry.mjs")).href
 );
 
@@ -150,4 +150,108 @@ test("게시 요청은 JSON 부분과 파일들을 multipart로 보내고 쿠키
   assert.ok(!JSON.stringify(json).includes("blob:"));
   assert.equal(request.body.getAll("images").length, 1);
   assert.equal(request.body.get("images").name, "photo.png");
+});
+
+const storedImage = (imageId) => ({ type: "image", attrs: { imageId, clientId: null, src: `https://untrusted.example/${imageId}` } });
+
+test("기존 사진만 있는 수정은 파일 없이 ID를 유지하고 미리보기 속성을 제거한다", () => {
+  const input = { ...draft([storedImage(7)]), text: "" };
+  const prepared = prepareRichPostUpdate(input, [7]);
+  assert.deepEqual(prepared.imageClientIds, []);
+  assert.deepEqual(prepared.images, []);
+  assert.deepEqual(prepared.contentJson.content[0].attrs, { imageId: 7 });
+  assert.equal(input.contentJson.content[0].attrs.clientId, null);
+});
+
+test("수정 본문의 기존·신규 사진 위치를 유지하고 새 파일만 본문 순서로 보낸다", () => {
+  const a = attachment("new-a");
+  const b = attachment("new-b");
+  const prepared = prepareRichPostUpdate(draft([
+    storedImage(8), image("new-b"), paragraph("사진 사이"), storedImage(7), image("new-a"),
+  ], [a, b]), [7, 8]);
+  assert.deepEqual(prepared.imageClientIds, ["new-b", "new-a"]);
+  assert.deepEqual(prepared.images, [b.file, a.file]);
+  assert.deepEqual(prepared.contentJson.content.filter((node) => node.type === "image").map((node) => node.attrs.imageId ?? node.attrs.clientId), [8, "new-b", 7, "new-a"]);
+});
+
+test("기존 사진 제거와 반복 사용을 처리하고 고유 사진 개수로 제한한다", () => {
+  const repeated = Array.from({ length: 6 }, () => storedImage(7));
+  assert.doesNotThrow(() => prepareRichPostUpdate({ ...draft(repeated), text: "" }, [7]));
+  assert.deepEqual(prepareRichPostUpdate(draft([paragraph("사진 제거")]), [7, 8]).contentJson.content, [paragraph("사진 제거")]);
+  const photo = attachment("new-a");
+  assert.doesNotThrow(() => prepareRichPostUpdate(draft([1, 2, 3, 4].map(storedImage).concat(image("new-a")), [photo]), [1, 2, 3, 4]));
+  assert.throws(() => prepareRichPostUpdate(draft([1, 2, 3, 4, 5].map(storedImage).concat(image("new-a")), [photo]), [1, 2, 3, 4, 5]));
+});
+
+test("수정 시 다른 사진 ID·모호한 참조·잘못된 파일 목록을 거절한다", () => {
+  assert.throws(() => prepareRichPostUpdate(draft([storedImage(99)]), [7]));
+  assert.throws(() => prepareRichPostUpdate(draft([{ type: "image", attrs: { imageId: 7, clientId: "new-a" } }], [attachment("new-a")]), [7]));
+  assert.throws(() => prepareRichPostUpdate(draft([image("missing")]), []));
+  assert.throws(() => prepareRichPostUpdate(draft([storedImage(7)], [attachment("unused")]), [7]));
+  assert.throws(() => prepareRichPostUpdate({ ...draft([paragraph(" ")]), text: " " }, [7]));
+});
+
+test("수정 초기화는 서버 사진 경로만 사용하고 원본을 변경하지 않는다", () => {
+  const input = {
+    id: 42,
+    content: "본문",
+    contentJson: { type: "doc", content: [paragraph("앞"), storedImage(7), paragraph("뒤")] },
+    images: [{ id: 7, url: "/posts/42/images/7", sortOrder: 0 }],
+  };
+  const original = JSON.stringify(input);
+  const initialized = createPostEditDraft(input);
+  assert.equal(initialized.contentJson.content[1].attrs.src, "/api/posts/42/images/7");
+  assert.equal(initialized.contentJson.content[1].attrs.imageId, 7);
+  assert.deepEqual(initialized.images, []);
+  assert.equal(JSON.stringify(input), original);
+  assert.throws(() => createPostEditDraft({ ...input, images: [] }));
+  assert.throws(() => createPostEditDraft({ ...input, images: [{ id: 7, url: "/posts/99/images/7", sortOrder: 0 }] }));
+  assert.throws(() => createPostEditDraft({ ...input, contentJson: { type: "doc", content: [{ type: "unknown" }] } }));
+});
+
+test("기존 일반 텍스트 글의 줄바꿈과 빈 줄도 수정 에디터에서 유지한다", () => {
+  const initialized = createPostEditDraft({ id: 42, content: "첫 줄\n\n마지막 줄", contentJson: null });
+  assert.deepEqual(initialized.contentJson.content, [paragraph("첫 줄"), { type: "paragraph" }, paragraph("마지막 줄")]);
+  assert.equal(initialized.text, "첫 줄\n\n마지막 줄");
+  assert.doesNotThrow(() => prepareRichPostUpdate(initialized, []));
+});
+
+test("수정 요청은 기존 사진 재전송·personaId 없이 신규 파일만 multipart로 보낸다", async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  const photo = attachment("new-a");
+  let request;
+  globalThis.fetch = async (url, options) => {
+    request = { url, ...options };
+    return Response.json({ id: 42, title: "수정 제목" });
+  };
+  await updateRichPost({ postId: 42, title: " 수정 제목 ", draft: draft([storedImage(7), image("new-a")], [photo]), existingImageIds: [7] });
+  assert.equal(request.url, "/api/posts/42");
+  assert.equal(request.method, "PATCH");
+  assert.equal(request.credentials, "include");
+  assert.equal(request.headers, undefined);
+  assert.equal(request.body.get("post").type, "application/json");
+  const json = JSON.parse(await request.body.get("post").text());
+  assert.equal(json.title, "수정 제목");
+  assert.equal(json.personaId, undefined);
+  assert.deepEqual(json.imageClientIds, ["new-a"]);
+  assert.deepEqual(json.contentJson.content[0].attrs, { imageId: 7 });
+  assert.deepEqual(request.body.getAll("images").map((file) => file.name), [photo.file.name]);
+});
+
+test("사진 유지·삭제만 하는 수정은 파일 부분을 보내지 않고 실패를 전달한다", async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  let body;
+  globalThis.fetch = async (_url, options) => {
+    body = options.body;
+    return Response.json({ id: 42 });
+  };
+  await updateRichPost({ postId: 42, title: "제목", draft: { ...draft([storedImage(7)]), text: "" }, existingImageIds: [7] });
+  assert.equal(body.getAll("images").length, 0);
+  assert.deepEqual(JSON.parse(await body.get("post").text()).imageClientIds, []);
+  for (const status of [400, 401, 403, 404, 413, 500]) {
+    globalThis.fetch = async () => new Response(null, { status });
+    await assert.rejects(updateRichPost({ postId: 42, title: "제목", draft: draft([paragraph("본문")]), existingImageIds: [] }));
+  }
 });

@@ -1,4 +1,9 @@
-import { prepareRichPost, type RichDocument, type RichPostDraft } from "../feed/richContent";
+import {
+  prepareRichPost,
+  prepareRichPostUpdate,
+  type RichDocument,
+  type RichPostDraft,
+} from "../feed/richContent";
 
 export interface Post {
   id: number;
@@ -25,6 +30,7 @@ export interface PostImageResponse {
 export interface PostDetailResponse extends PostSummaryResponse {
   contentJson?: RichDocument | null;
   images?: PostImageResponse[];
+  isMine: boolean;
 }
 
 export interface PageMetadata {
@@ -89,10 +95,14 @@ export interface CreateRichPostRequest {
   draft: RichPostDraft;
 }
 
-export async function getPosts(
-  page = 0,
-  size = 20,
-): Promise<PostPageResponse> {
+export interface UpdateRichPostRequest {
+  postId: number;
+  title: string;
+  draft: RichPostDraft;
+  existingImageIds: readonly number[];
+}
+
+export async function getPosts(page = 0, size = 20): Promise<PostPageResponse> {
   const params = new URLSearchParams({
     page: String(page),
     size: String(size),
@@ -135,12 +145,20 @@ export async function createRichPost({
 
   const prepared = prepareRichPost(draft);
   const body = new FormData();
-  body.append("post", new Blob([JSON.stringify({
-    personaId,
-    title: trimmedTitle,
-    contentJson: prepared.contentJson,
-    imageClientIds: prepared.imageClientIds,
-  })], { type: "application/json" }));
+  body.append(
+    "post",
+    new Blob(
+      [
+        JSON.stringify({
+          personaId,
+          title: trimmedTitle,
+          contentJson: prepared.contentJson,
+          imageClientIds: prepared.imageClientIds,
+        }),
+      ],
+      { type: "application/json" },
+    ),
+  );
   for (const image of prepared.images) {
     body.append("images", image, image.name);
   }
@@ -152,12 +170,66 @@ export async function createRichPost({
   });
 
   if (!response.ok) {
-    const message = response.status === 413
-      ? "첨부한 사진의 용량이 너무 커요. 장당 5MB 이하로 선택해 주세요."
-      : "이야기를 게시하지 못했어요. 잠시 후 다시 시도해 주세요.";
+    const message =
+      response.status === 413
+        ? "첨부한 사진의 용량이 너무 커요. 장당 5MB 이하로 선택해 주세요."
+        : "이야기를 게시하지 못했어요. 잠시 후 다시 시도해 주세요.";
     throw new Error(message);
   }
 
+  return response.json();
+}
+
+export async function updateRichPost({
+  postId,
+  title,
+  draft,
+  existingImageIds,
+}: UpdateRichPostRequest): Promise<Post> {
+  if (!Number.isSafeInteger(postId) || postId <= 0) {
+    throw new Error("수정할 게시글을 확인해 주세요.");
+  }
+  const trimmedTitle = title.trim();
+  if (!trimmedTitle || trimmedTitle.length > 100) {
+    throw new Error("제목은 1~100자로 입력해 주세요.");
+  }
+  const prepared = prepareRichPostUpdate(draft, existingImageIds);
+  const body = new FormData();
+  body.append(
+    "post",
+    new Blob(
+      [
+        JSON.stringify({
+          title: trimmedTitle,
+          contentJson: prepared.contentJson,
+          imageClientIds: prepared.imageClientIds,
+        }),
+      ],
+      { type: "application/json" },
+    ),
+  );
+  for (const image of prepared.images) {
+    body.append("images", image, image.name);
+  }
+
+  const response = await fetch(`/api/posts/${postId}`, {
+    method: "PATCH",
+    credentials: "include",
+    body,
+  });
+  if (!response.ok) {
+    const messages: Record<number, string> = {
+      400: "제목·본문·첨부 이미지를 확인해 주세요. 기존 사진은 글을 다시 불러와 확인할 수 있어요.",
+      401: "로그인이 만료됐어요. 다시 로그인해 주세요.",
+      403: "이 게시글을 수정할 수 없어요.",
+      404: "게시글이 삭제되었거나 수정할 수 없어요.",
+      413: "첨부한 사진의 용량이 너무 커요. 장당 5MB 이하로 선택해 주세요.",
+    };
+    throw new Error(
+      messages[response.status] ??
+        "이야기를 수정하지 못했어요. 입력한 내용은 유지되니 다시 시도해 주세요.",
+    );
+  }
   return response.json();
 }
 
@@ -222,8 +294,12 @@ export async function updateComment({
   commentId,
   content,
 }: UpdateCommentRequest): Promise<comment> {
-  if (!Number.isSafeInteger(postId) || postId <= 0
-      || !Number.isSafeInteger(commentId) || commentId <= 0) {
+  if (
+    !Number.isSafeInteger(postId) ||
+    postId <= 0 ||
+    !Number.isSafeInteger(commentId) ||
+    commentId <= 0
+  ) {
     throw new Error("수정할 댓글을 확인해 주세요.");
   }
   validateCommentContent(content);

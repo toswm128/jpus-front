@@ -57,6 +57,17 @@
   border-left: 1px solid var(--border);
 }
 
+.rich-post-toolbar__image-actions {
+  flex-wrap: nowrap;
+}
+
+.rich-post-toolbar__image-label {
+  margin-inline: 3px;
+  color: var(--text-muted);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
 .rich-editor-tool {
   display: inline-flex;
   align-items: center;

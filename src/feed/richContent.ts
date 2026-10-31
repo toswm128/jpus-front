@@ -74,16 +74,21 @@ function allowsChild(parent: string, child: string): boolean {
   return false;
 }
 
-function sanitizeDocument(source: unknown, mode: "draft" | "stored") {
+function sanitizeDocument(
+  source: unknown,
+  mode: "draft" | "stored" | "update",
+  allowedExistingIds: ReadonlySet<number> = new Set(),
+) {
   const sourceDocument = readJson(source);
   if (!isRecord(sourceDocument) || sourceDocument.type !== "doc") invalidDocument();
 
   let nodeCount = 0;
   let textLength = 0;
   let hasText = false;
-  let imageCount = 0;
+  const imageReferences = new Set<string>();
   const clientIds: string[] = [];
   const seenClientIds = new Set<string>();
+  const existingImageIds = new Set<number>();
 
   const visit = (sourceNode: unknown, depth: number): RichDocument => {
     if (
@@ -136,17 +141,24 @@ function sanitizeDocument(source: unknown, mode: "draft" | "stored") {
       }
       result.attrs = { start };
     } else if (type === "image") {
-      if (++imageCount > MAX_POST_IMAGES) {
-        throw new Error("이미지는 최대 5장까지 첨부할 수 있어요.");
-      }
       const imageAttrs: Record<string, string | number> = {};
       for (const key of ["alt", "title"] as const) {
         if (attrs[key] !== undefined && attrs[key] !== null) {
-          if (typeof attrs[key] !== "string") invalidDocument();
+          if (typeof attrs[key] !== "string" || attrs[key].length > 500) invalidDocument();
           imageAttrs[key] = attrs[key] as string;
         }
       }
-      if (mode === "draft") {
+      if (mode === "update" && attrs.imageId !== undefined && attrs.imageId !== null) {
+        const imageId = attrs.imageId;
+        if (attrs.clientId !== undefined && attrs.clientId !== null) invalidDocument();
+        if (typeof imageId !== "number" || !Number.isSafeInteger(imageId)
+          || imageId <= 0 || !allowedExistingIds.has(imageId)) {
+          throw new Error("이 게시글의 이미지를 확인하지 못했어요. 글을 다시 불러와 주세요.");
+        }
+        existingImageIds.add(imageId);
+        imageReferences.add(`image:${imageId}`);
+        imageAttrs.imageId = imageId;
+      } else if (mode === "draft" || mode === "update") {
         const clientId = attrs.clientId;
         if (attrs.imageId !== undefined && attrs.imageId !== null) {
           throw new Error("이미지를 다시 첨부해 주세요.");
@@ -154,17 +166,25 @@ function sanitizeDocument(source: unknown, mode: "draft" | "stored") {
         if (typeof clientId !== "string" || !CLIENT_ID_PATTERN.test(clientId)) {
           throw new Error("첨부 이미지 정보를 확인하지 못했어요. 이미지를 다시 추가해 주세요.");
         }
-        if (seenClientIds.has(clientId)) {
+        if (mode === "draft" && seenClientIds.has(clientId)) {
           throw new Error("같은 이미지가 본문에 중복되어 있어요. 다시 첨부해 주세요.");
         }
+        if (!seenClientIds.has(clientId)) clientIds.push(clientId);
         seenClientIds.add(clientId);
-        clientIds.push(clientId);
+        imageReferences.add(`client:${clientId}`);
         imageAttrs.clientId = clientId;
       } else if (
         typeof attrs.imageId === "number" &&
         Number.isSafeInteger(attrs.imageId) && attrs.imageId > 0
       ) {
         imageAttrs.imageId = attrs.imageId;
+        existingImageIds.add(attrs.imageId);
+        imageReferences.add(`image:${attrs.imageId}`);
+      } else {
+        imageReferences.add(`invalid:${nodeCount}`);
+      }
+      if (imageReferences.size > MAX_POST_IMAGES) {
+        throw new Error("이미지는 최대 5장까지 첨부할 수 있어요.");
       }
       // Browser preview URLs and all other attributes never enter the stored document.
       result.attrs = imageAttrs;
@@ -186,7 +206,8 @@ function sanitizeDocument(source: unknown, mode: "draft" | "stored") {
     return result;
   };
 
-  return { document: visit(sourceDocument, 1), clientIds, hasText };
+  const document = visit(sourceDocument, 1);
+  return { document, clientIds, existingImageIds, hasText };
 }
 
 /** Reads only the supported JSON vocabulary; malformed content uses the plain body instead. */
@@ -205,6 +226,26 @@ export function prepareRichPost(draft: RichPostDraft): {
   imageClientIds: string[];
   images: File[];
 } {
+  return preparePostDraft(draft, "draft");
+}
+
+/** Keeps only this post's existing image IDs; file parts contain new uploads only. */
+export function prepareRichPostUpdate(draft: RichPostDraft, existingImageIds: readonly number[]): {
+  contentJson: RichDocument;
+  imageClientIds: string[];
+  images: File[];
+} {
+  if (!Array.isArray(existingImageIds) || existingImageIds.some((id) => !Number.isSafeInteger(id) || id <= 0)) {
+    throw new Error("기존 이미지 정보를 확인하지 못했어요. 글을 다시 불러와 주세요.");
+  }
+  return preparePostDraft(draft, "update", new Set(existingImageIds));
+}
+
+function preparePostDraft(
+  draft: RichPostDraft,
+  mode: "draft" | "update",
+  allowedExistingIds: ReadonlySet<number> = new Set(),
+): { contentJson: RichDocument; imageClientIds: string[]; images: File[] } {
   if (!isRecord(draft) || typeof draft.text !== "string" || !Array.isArray(draft.images)) {
     invalidDocument();
   }
@@ -215,7 +256,7 @@ export function prepareRichPost(draft: RichPostDraft): {
     throw new Error("이미지는 최대 5장까지 첨부할 수 있어요.");
   }
 
-  const { document, clientIds, hasText } = sanitizeDocument(draft.contentJson, "draft");
+  const { document, clientIds, existingImageIds, hasText } = sanitizeDocument(draft.contentJson, mode, allowedExistingIds);
   const filesByClientId = new Map<string, File>();
 
   for (const attachment of draft.images) {
@@ -244,7 +285,7 @@ export function prepareRichPost(draft: RichPostDraft): {
   ) {
     throw new Error("본문의 이미지와 첨부 파일이 일치하지 않아요. 이미지를 다시 추가해 주세요.");
   }
-  if ((!hasText || !draft.text.trim()) && clientIds.length === 0) {
+  if ((!hasText || !draft.text.trim()) && clientIds.length === 0 && existingImageIds.size === 0) {
     throw new Error("이야기 내용이나 이미지를 추가해 주세요.");
   }
 
@@ -253,4 +294,52 @@ export function prepareRichPost(draft: RichPostDraft): {
     imageClientIds: clientIds,
     images: clientIds.map((clientId) => filesByClientId.get(clientId)!),
   };
+}
+
+export interface PostEditSource {
+  id: number;
+  content: string;
+  contentJson?: unknown;
+  images?: readonly { id: number; url: string; sortOrder: number }[];
+}
+
+/** Initializes an edit once, using server image metadata rather than document URLs. */
+export function createPostEditDraft(source: PostEditSource): RichPostDraft {
+  if (!Number.isSafeInteger(source.id) || source.id <= 0 || typeof source.content !== "string") invalidDocument();
+  const images = source.images ?? [];
+  if (!Array.isArray(images)) invalidDocument();
+
+  let document: RichDocument;
+  if (source.contentJson === null || source.contentJson === undefined) {
+    if (images.length > 0) invalidDocument();
+    document = {
+      type: "doc",
+      content: source.content.split(/\r\n|\r|\n/).map((line) => ({
+        type: "paragraph",
+        ...(line ? { content: [{ type: "text", text: line }] } : {}),
+      })),
+    };
+  } else {
+    document = sanitizeDocument(source.contentJson, "stored").document;
+  }
+
+  const safeUrls = new Map<number, string>();
+  for (const image of images) {
+    if (!image || !Number.isSafeInteger(image.id) || image.id <= 0) invalidDocument();
+    const expected = `/posts/${source.id}/images/${image.id}`;
+    if (image.url !== expected) invalidDocument();
+    safeUrls.set(image.id, `/api${expected}`);
+  }
+  const hydrate = (node: RichDocument): void => {
+    if (node.type === "image") {
+      const imageId: unknown = node.attrs?.imageId;
+      if (typeof imageId !== "number" || !safeUrls.has(imageId)) {
+        throw new Error("본문 이미지를 확인하지 못했어요. 글을 다시 불러와 주세요.");
+      }
+      node.attrs = { ...node.attrs, src: safeUrls.get(imageId) };
+    }
+    node.content?.forEach(hydrate);
+  };
+  hydrate(document);
+  return { contentJson: document, text: source.content, images: [] };
 }

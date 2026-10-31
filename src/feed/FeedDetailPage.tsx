@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import { getMe } from "../api/auth";
-import { getPost } from "../api/post";
+import { getPost, type PostDetailResponse } from "../api/post";
 import { postKeys } from "../api/postKeys";
 import Icon from "../components/Icon";
 import {
@@ -16,6 +17,101 @@ import { formatDate } from "../lib/format";
 import CommentComponent from "./CommentComponent";
 import PostReaction from "./PostReaction";
 import PostContent from "./PostContent";
+import PostEditForm from "./PostEditForm";
+
+type PostDetailContentProps = {
+  post: PostDetailResponse;
+  userId: number | undefined;
+  contentKey: string;
+  isFetching: boolean;
+  isError: boolean;
+};
+
+function PostDetailContent({
+  post,
+  userId,
+  contentKey,
+  isFetching,
+  isError,
+}: PostDetailContentProps) {
+  const [editSnapshot, setEditSnapshot] = useState<PostDetailResponse | null>(null);
+
+  return (
+    <>
+      <Card className="post-detail">
+        <article aria-labelledby="post-detail-title">
+          <div className="post-detail__header">
+            <div className="author">
+              <Avatar name={post.authorNameSnapshot} size="lg" />
+              <div className="author__meta">
+                <span className="author__name">{post.authorNameSnapshot}</span>
+                <time className="author__time" dateTime={post.createdAt}>
+                  {formatDate(post.createdAt)}
+                </time>
+              </div>
+            </div>
+            <div className="post-detail__tools">
+              <span className="muted">#{post.id}</span>
+              {post.isMine && userId !== undefined && !editSnapshot && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  aria-label="게시글 수정"
+                  disabled={isFetching || isError}
+                  onClick={() => setEditSnapshot(post)}
+                >
+                  <Icon name="pen" size={15} />
+                  수정
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {editSnapshot && userId !== undefined ? (
+            <PostEditForm
+              key={contentKey}
+              post={editSnapshot}
+              userId={userId}
+              onCancel={() => setEditSnapshot(null)}
+              onSaved={() => setEditSnapshot(null)}
+            />
+          ) : (
+            <>
+              <h1 id="post-detail-title" className="post-detail__title">
+                {post.title?.trim() || "제목 없는 이야기"}
+              </h1>
+              <PostContent
+                postId={post.id}
+                content={post.content}
+                contentJson={post.contentJson}
+                images={post.images}
+              />
+            </>
+          )}
+
+          <div className="post-detail__footer post-detail__actions">
+            <PostReaction
+              key={contentKey}
+              post={post}
+              disabled={isFetching || isError || editSnapshot !== null}
+            />
+            <a className="post-comments-link" href="#post-comments">
+              <Icon name="message" size={17} />
+              댓글 {post.commentCount.toLocaleString("ko-KR")}
+            </a>
+            {post.updatedAt && (
+              <span className="post-detail__edited">수정된 이야기</span>
+            )}
+          </div>
+        </article>
+      </Card>
+
+      <section id="post-comments" aria-label="게시글 댓글">
+        <CommentComponent key={contentKey} postId={post.id} />
+      </section>
+    </>
+  );
+}
 
 const FeedDetailPage = () => {
   const { id } = useParams();
@@ -89,51 +185,14 @@ const FeedDetailPage = () => {
             </Card>
           )}
 
-          <Card className="post-detail">
-            <article aria-labelledby="post-detail-title">
-              <div className="post-detail__header">
-                <div className="author">
-                  <Avatar name={post.authorNameSnapshot} size="lg" />
-                  <div className="author__meta">
-                    <span className="author__name">{post.authorNameSnapshot}</span>
-                    <time className="author__time" dateTime={post.createdAt}>
-                      {formatDate(post.createdAt)}
-                    </time>
-                  </div>
-                </div>
-                <span className="muted">#{post.id}</span>
-              </div>
-
-              <h1 id="post-detail-title" className="post-detail__title">
-                {post.title?.trim() || "제목 없는 이야기"}
-              </h1>
-              <PostContent
-                postId={post.id}
-                content={post.content}
-                contentJson={post.contentJson}
-                images={post.images}
-              />
-
-              <div className="post-detail__footer post-detail__actions">
-                <PostReaction
-                  key={contentKey}
-                  post={post}
-                  disabled={postQuery.isFetching || postQuery.isError}
-                />
-                <a className="post-comments-link" href="#post-comments">
-                  <Icon name="message" size={17} />
-                  댓글 {post.commentCount.toLocaleString("ko-KR")}
-                </a>
-                {post.updatedAt && (
-                  <span className="post-detail__edited">수정된 이야기</span>
-                )}
-              </div>
-            </article>
-          </Card>
-
-          <section id="post-comments" aria-label="게시글 댓글">
-            <CommentComponent key={contentKey} postId={postId} />
-          </section>
+          <PostDetailContent
+            key={contentKey}
+            post={post}
+            userId={me?.id}
+            contentKey={contentKey}
+            isFetching={postQuery.isFetching}
+            isError={postQuery.isError}
+          />
         </>
       )}
     </div>
